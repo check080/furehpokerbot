@@ -1,31 +1,87 @@
 import requests
 import json
 
-class player: #send the player a game request IFF currentGame==0 AND online==True
-    def __init__(self,plid,username):
+class card:
+    def __init__(self,rankid,suitid):
+        self.rank=rankid
+        self.suit=suitid
+
+class player:
+    def __init__(self,plid,username,chips):
+        #SAVE STUFF
         self.id=plid
         self.username=username
-        self.chips=1000
+        self.chips=chips
+
+        #GAME STUFF
+        self.online=True
+        self.tier=1
         self.currentGame=0 #Player's current game id
         self.currentGameInvite=0 #Player's invite game id
-        self.online=True
+        self.holding=False
+        self.hand={}
+
+    def updateTier(self):
+        retNum=0
+        if(self.chips==0):
+            self.tier=0
+            return
+        for i in range(len(TIER_CUTOFFS)):
+            if(TIER_CUTOFF[i]>self.chips):
+                break
+            retNum=i+1
+        self.tier=retNum
+            
+    def acceptResponse(self,reqtext): #All user text is sent here when they are mid-game
+        curGame=games[self.currentGame]
+        reqtext=reqtext.upper() #Make it case insensitive
+        if(curGame.players[currentTurn]==self.id): #if it's your turn
+            if(curGame.phase=="hand"):
+                if(reqtext=="HOLD"):
+                    self.holding=True
+                    curGame.
+                
 
 class game:
     def __init__(self,gmid,tiernum):
         self.id=gmid
         self.tier=tiernum #the tier of players this game is open to
         self.phase="wait" #can be wait, hand, or bet
-        self.players=[] #list of all plid's
-        self.hands={} #plid: hand
-    def end(self):
+        self.players=[] #list of all playing plid's
+        self.currentTurn=0 #array index of which player's turn it is
+        self.consecutiveHolds=0 #number of holds in a row; if this >= len(players) then startBet is triggered
+        self.invites=[] #list of all invited plid's
+        self.deck=[] #list of all cards remaining in the deck
+        self.begin()
+    def shuffleDeck(self):
+        print("Just randomly reorder self.deck here")
+    def beginGame(self):
+        #Send invitations to everyone, and set a listener for their response
+        for i in players.values():
+            if(i.online and i.currentGame==0 and TIER_CUTOFFS[self.tier-1]<i.chips<TIER_CUTOFFS[self.tier]): #if they're online, not in a game, and in the right tier
+                self.invites.append(i.id)
+                i.currentGameInvite=gmid
+    def startHand(self):
+        self.phase="hand"
+        #give everyone 5 cards from the deck, then go one person at a time waiting for either a response or the expiration of the timer object
+    def nextHandTurn(self):
+        self.currentTurn=(self.currentTurn+1)%len(players)
+    def startBet(self):
+        print("Nothing here yet")
+    def endGame(self):
         del games[self.id]
         
 
 BOT_TOKEN="598223102:AAGRkSBjoZV2KMKLtGAFB7xlMJnN1xShpTA"
 ACCESS_WEBSITE="https://api.telegram.org/bot"+BOT_TOKEN+"/"
+rankdict={1:"Ace",2:"2",3:"3",4:"4",5:"5",6:"6",7:"7",8:"8",9:"9",10:"10",11:"Jack",12:"Queen",13:"King"}
+suitdict={1:"Spades",2:"Hearts",3:"Diamonds",4:"Clubs"}
 ADMIN_IDS=[156638024,131331518] #Facade and Alexi
 LEADERBOARD_NUM=10 #How many names to display in the leaderboard
 TIER_CUTOFFS=[0, 1000, 2000, 3000, 4000] #The minimum required chips to be a member of each tier
+MAX_SIMULTANEOUS_GAMES=40
+STARTING_CHIPS=1000
+MAX_PLAYERS_PER_GAME=2 #will change later
 
 cont=True
 players={} #plid: player instance
@@ -75,7 +131,7 @@ def getGameList(): #Returns a list of the games currently running/waiting for pl
     for i in range(1,len(TIER_CUTOFFS)+1):
         tieredGames[i]=[]
     for j in games.values():
-        retString=""
+        retString="%d: " %j.id
         if(j.phase=="wait"):
             retString+="Waiting for players, "
         else:
@@ -108,7 +164,9 @@ def processCommand(usrReq):
             retString="ADMIN COMMANDS:\n" \
                       "/quit - Stop the server\n" \
                       "/startgame [tier] - Start a new game on the specified tier\n" \
-                      "/gamestats - See all game stats"
+                      "/gamestats - See all game stats\n" \
+                      "/freeze - stop game events, stop sending invites\n" \
+                      "/resume - continue game events and invites"
             sendMessage(userid,retString)
             
         elif(cmdList[0]=="/startgame"):
@@ -141,8 +199,8 @@ def processCommand(usrReq):
             if(not players[userid].online):
                 sendMessage(userid,"You are currently offline. If you want to get invited to poker games, say /online")
         else: #if they aren't
-            players[userid]=player(userid,username) #add a dict entry with a new instance of the player class
-            sendMessage(userid,"Welcome to Fur-Eh poker. Explanation text. Type /help for more commands. Your balance is %d chips." %players[userid].chips )
+            players[userid]=player(userid,username,STARTING_CHIPS) #add a dict entry with a new instance of the player class
+            sendMessage(userid,"Welcome to Fur-Eh poker. Type /rules to learn to play. Type /help for more commands. Your balance is %d chips." %players[userid].chips )
 
     elif(reqtext=="/help"):
         retString="Bot Commands:\n" \
@@ -163,14 +221,22 @@ def processCommand(usrReq):
         if(reqtext[0]=="/"):
             sendMessage(userid,"You can't use bot commands in the middle of a game.")
         else:
-            print("GAME REQUEST RECEIVED.")
+            players[userid].acceptResponse(reqtext)
 
     elif(reqtext=="/join"):
         retString=""
         if(not players[userid].online):
             sendMessage(userid,"You are currently marked as offline. Type /online to get game invitations.")
         elif(players[userid].currentGameInvite==0):
-            sendMessage(userid,"No game to join yet. Wait for an invite, and then type /join")
+            newGame(self.tier,userid)
+        else:
+            players[userid].currentGame=players[userid].currentGameInvite #join the game
+            players[userid].currentGameInvite=0 #clear invites
+            retString="Joined game. Users at the table:"
+            for i in games[players[userid].currentGame].players:
+                retString+=("\n@"+players[i].username) #print usernames of everyone in the game lobby
+                sendMessage(i,"%s has joined the table." %username) #also tell everyone in the lobby that you joined
+            sendMessage(userid,retString)
 
     elif(reqtext=="/offline"):
         if(players[userid].online):
@@ -193,9 +259,22 @@ def processCommand(usrReq):
             retText+="\n%s: %s" %(i[0],i[1])
         sendMessage(userid,retText)
     
-def newGame(tiernum):
-    print("Starting new game for tier %d." %tiernum)
-    #Access the array with tiernum-1
+def newGame(tiernum,creatorid):
+    print("Starting new game for tier %d..." %tiernum)
+    success=False
+    gmid=0
+    for i in range(1,MAX_SIMULTANEOUS_GAMES+1):
+        if(not i in games):
+            gmid=i
+            success=True
+            break
+    if(not success):
+        sendMessage(creatorid,"Too many games in progress. Wait a while and try again.")
+    else:
+        games[gmid]=game(gmid,tiernum,creatorid)
+        players[creatorid].currentGame=gmid
+        sendMessage(creatorid,"New game created. Game will start in 10 minutes at most.")
+        #START A TIMER
 
 def main():
     #Initialization here
@@ -218,8 +297,6 @@ def main():
                     
                 except KeyError:
                     continue
-
-        #CHECK TIMERS
         
     botUpdate(numClear) #get rid of the last update queue
 

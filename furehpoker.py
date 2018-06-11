@@ -1,10 +1,35 @@
 import requests
 import json
+from random import shuffle
+
+BOT_TOKEN="598223102:AAGRkSBjoZV2KMKLtGAFB7xlMJnN1xShpTA"
+ACCESS_WEBSITE="https://api.telegram.org/bot"+BOT_TOKEN+"/"
+rankdict={1:"Ace",2:"2",3:"3",4:"4",5:"5",6:"6",7:"7",8:"8",9:"9",10:"10",11:"Jack",12:"Queen",13:"King"}
+suitdict={1:"Spades",2:"Hearts",3:"Diamonds",4:"Clubs"}
+ADMIN_IDS=[156638024,131331518] #Facade and Alexi
+LEADERBOARD_NUM=10 #How many names to display in the leaderboard
+TIER_CUTOFFS=[5, 1000, 2000, 3000, 4000] #The minimum required chips to be a member of each tier
+TIER_BUYINS= [5,   10,   20,   30,   40] #The buyin cost for a game on that tier
+MAX_SIMULTANEOUS_GAMES=40
+STARTING_CHIPS=1000
+MAX_PLAYERS_PER_GAME=2 #will change later; can't be more than 10 if only 1 deck is used
+MAX_DRAWS=2
+DRAW_COSTS=[10,20] #The price of drawing based on which turn, needs to be at least as long as MAX_DRAWS
+CARDS_PER_HAND=5
+CARD_DECKS=1 #Decks worth of cards used in each game
+
+cont=True
+players={} #plid: player instance
+games={} #gmid: game instance
+
+
 
 class card:
     def __init__(self,rankid,suitid):
         self.rank=rankid
         self.suit=suitid
+    def getName(self):
+        return rankdict[self.rankid]+" of "+suitdict[self.suitid]
 
 class player:
     def __init__(self,plid,username,chips):
@@ -12,20 +37,12 @@ class player:
         self.id=plid
         self.username=username
         self.chips=chips
-
-        #GAME STUFF
         self.online=True
-        self.tier=1
-        self.currentGame=0 #Player's current game id
-        self.currentGameInvite=0 #Player's invite game id
-        self.holding=False
-        self.draws=0
-        self.hand={}
 
     def updateTier(self):
         retNum=0
-        if(self.chips==0):
-            self.tier=0
+        if(self.chips<TIER_CUTOFFS[0]):
+            self.tier=-1 #Can't play anymore.
             return
         for i in range(len(TIER_CUTOFFS)):
             if(TIER_CUTOFF[i]>self.chips):
@@ -34,24 +51,43 @@ class player:
         self.tier=retNum
 
     def getHand(self):
-        return "I dunno dude"
+        retString=""
+        for i in range(len(self.hand)):
+            retString+="\n%d: %s" %(i+1,self.hand[i].getName)
+        return retString
+
+    def gameInit(self):
+        #GAME STUFF
+        self.tier=1
+        self.currentGame=0 #Player's current game id
+        self.currentGameInvite=0 #Player's invite game id
+        self.holding=False
+        self.hand=[]
+        self.timerRef=0
+        self.awaitingInput="none" #Can be none, handturn, drawcards, betturn, raiseamt
             
     def acceptResponse(self,reqtext): #All user text is sent here when they are mid-game
         curGame=games[self.currentGame]
         reqtext=reqtext.upper() #Make it case insensitive
-        if(curGame.players[currentTurn]==self.id): #if it's your turn
-            if(curGame.phase=="hand"):
+        if(curGame.players[currentTurn]==self.id): #if it's your turn, check for event listeners
+            if(self.awaitingInput=="handturn"):
+                #Destroy the timer
                 if(reqtext=="HOLD"):
                     self.holding=True
-                    curGame.consecutiveHolds+=1
-                    curGame.nextTurn()
+                    self.awaitingInput="none"
+                    curGame.handTurn()
                 elif(reqtext=="DRAW"):
-                    if(self.draws>=MAX_DRAWS):
-                        sendMessage(self.id,"You can't draw more than %d times." %MAX_DRAWS)
-                    else:
-                        self.draws+=1
-                        #ALSO THE REST OF IT
-                
+                    sendMessage(self.id,"Here's the format") #fix this please
+                    self.awaitingInput="drawcards")
+                else:
+                    sendMessage(self.id,"Your options are:\nHOLD (free)\nDRAW (%d chips)" %DRAW_COSTS[curGame.currentHandRound])
+            elif(self.awaitingInput=="drawcards"):
+                try:
+                    reqtext=reqtext.replace(","," ")
+                    numList=[int(i) for i in reqtext.split(" ")]
+                except ValueError:
+                    sendMessage(self.id,"Wrong format fucko") #this too
+                #Then swap the specified cards out
 
 class game:
     def __init__(self,gmid,tiernum):
@@ -59,13 +95,13 @@ class game:
         self.tier=tiernum #the tier of players this game is open to
         self.phase="wait" #can be wait, hand, or bet
         self.pPlaying=[] #list of all playing plid's
-        self.currentTurn=0 #array index of which player's turn it is
-        self.consecutiveHolds=0 #number of holds in a row; if this >= len(players) then startBet is triggered
+        self.currentPlayerTurn=0 #array index of which player's turn it is
+        self.currentHandRound=0 #turn number of which round it is
         self.invites=[] #list of all invited plid's
         self.deck=[] #list of all cards remaining in the deck
+        self.currentBet=0
+        self.pot=0 #number of chips in the pot
         self.begin()
-    def shuffleDeck(self):
-        print("Just randomly reorder self.deck here")
     def beginGame(self):
         #Send invitations to everyone, and set a listener for their response
         for i in players.values():
@@ -78,42 +114,38 @@ class game:
         for i in players.values():
             if(i.currentGameInvite==gmid):
                 i.currentGameInvite=0
-        #Give everyone 5 cards from the deck, then go one person at a time waiting for either a response or the expiration of the timer object
-    def nextTurn(self):
-        self.currentTurn=(self.currentTurn+1)%len(self.pPlaying)
-        if(self.phase=="hand"):
-            if(self.consecutiveHolds>=len(self.pPlaying): #if it's gone in a circle and everyone held
-               self.startBet()
-            else:
-                self.handTurn(self.pPlaying[self.currentTurn])
-        elif(self.phase=="bet"):
-            self.betTurn(self.pPlaying[self.currentTurn])
-    def handTurn(self,plid):
-        if(players[plid].draws>=MAX_DRAWS):
-               sendMessage(plid,"Cards: "+players[plid].getHand()+"\n"+makeKeyboard(["HOLD"]) )
+        #Make deck(s), shuffle deck
+        for k in CARD_DECKS:
+            for i in rankdict.keys():
+                for j in suitdict.keys():
+                    deck.append(card(i,j))
+        shuffle(self.deck)
+        #Give everyone 5 cards, put entry cost into the piot, send everyone a message, listen for responses, and start a timer
+        for i in self.pPlaying:
+            players[i].chips-=5
+            self.pot+=5
+            players[i].awaitingInput="handturn" #An event listener answered by player.acceptResponse
+            sendMessage(i,"Cards: "+players[i].getHand()+makeKeyboard(["HOLD","DRAW"]) )
+    def handTurn(self):
+        self.currentHandRound+=1
+        if(self.currentHandRound>=MAX_DRAWS):
+            self.currentHandRound=0 #for safety
+            self.startBet()
         else:
-            sendMessage(plid,"Cards: "+players[plid].getHand()+"\n"+makeKeyboard(["HOLD","DRAW"]) )
+            for i in self.pPlaying:
+                if(not i.holding):
+                    players[i].awaitingInput="handturn" #An event listener answered by player.acceptResponse
+                    sendMessage(i,"Cards: "+players[i].getHand()+makeKeyboard(["HOLD","DRAW"]) )
     def startBet(self):
-        print("Nothing here yet")
+        self.currentTurn=0
+        sendMessage(self.pPlaying[self.currentTurn],"The current bet is %d."%self.currentBet+"Cards: "+players[self.pPlaying[self.currentTurn]].getHand()+makeKeyboard(["FOLD","CALL","RAISE"]))
+    def betTurn(self):
+        #Let everyone bet one at a time
+        #Setup the next turn, message the next person their query
+        self.currentTurn=(self.currentTurn+1)%len(self.pPlaying)
+        sendMessage(self.pPlaying[self.currentTurn],"The current bet is %d."%self.currentBet+"Cards: "+players[self.pPlaying[self.currentTurn]].getHand()+makeKeyboard(["FOLD","CALL","RAISE"]))
     def endGame(self):
         del games[self.id]
-        
-
-BOT_TOKEN="598223102:AAGRkSBjoZV2KMKLtGAFB7xlMJnN1xShpTA"
-ACCESS_WEBSITE="https://api.telegram.org/bot"+BOT_TOKEN+"/"
-rankdict={1:"Ace",2:"2",3:"3",4:"4",5:"5",6:"6",7:"7",8:"8",9:"9",10:"10",11:"Jack",12:"Queen",13:"King"}
-suitdict={1:"Spades",2:"Hearts",3:"Diamonds",4:"Clubs"}
-ADMIN_IDS=[156638024,131331518] #Facade and Alexi
-LEADERBOARD_NUM=10 #How many names to display in the leaderboard
-TIER_CUTOFFS=[0, 1000, 2000, 3000, 4000] #The minimum required chips to be a member of each tier
-MAX_SIMULTANEOUS_GAMES=40
-STARTING_CHIPS=1000
-MAX_PLAYERS_PER_GAME=2 #will change later
-MAX_DRAWS=2
-
-cont=True
-players={} #plid: player instance
-games={} #gmid: game instance 
 
 
 
@@ -260,12 +292,15 @@ def processCommand(usrReq):
             players[userid].acceptResponse(reqtext)
 
     elif(reqtext=="/join"):
-        retString=""
+        players[userid].gameInit() #Reset all their game variables
         if(not players[userid].online):
             sendMessage(userid,"You are currently marked as offline. Type /online to get game invitations.")
+        elif(players[userid].currentTier==-1):
+            sendMessage(userid,"Sorry, you don't have enough chips to continue playing. Have a fun Fur-Eh!")
         elif(players[userid].currentGameInvite==0):
             newGame(self.tier,userid)
         else:
+            retString=""
             players[userid].currentGame=players[userid].currentGameInvite #join the game
             players[userid].currentGameInvite=0 #clear invite
             retString="Joined game. Users at the table:"
@@ -315,7 +350,10 @@ def newGame(tiernum,creatorid):
         #START A TIMER
 
 def main():
-    #Initialization here
+    #Load ffrom file
+    for i in players.values():
+        if(i.online):
+            sendMessage(i.id,"Server restarted. Any previously ongoing games were terminated. Sorry for any inconvenience.")
     print("Initialized.")
 
     numClear=0

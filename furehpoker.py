@@ -6,15 +6,19 @@ class player: #send the player a game request IFF currentGame==0 AND online==Tru
         self.id=plid
         self.username=username
         self.chips=1000
-        self.currentGame=0
-        self.currentGameInvite=0
+        self.currentGame=0 #Player's current game id
+        self.currentGameInvite=0 #Player's invite game id
         self.online=True
 
 class game:
-    def __init__(self):
+    def __init__(self,gmid,tiernum):
+        self.id=gmid
+        self.tier=tiernum #the tier of players this game is open to
         self.phase="wait" #can be wait, hand, or bet
         self.players=[] #list of all plid's
         self.hands={} #plid: hand
+    def end(self):
+        del games[self.id]
         
 
 BOT_TOKEN="598223102:AAGRkSBjoZV2KMKLtGAFB7xlMJnN1xShpTA"
@@ -24,8 +28,10 @@ LEADERBOARD_NUM=10 #How many names to display in the leaderboard
 TIER_CUTOFFS=[0, 1000, 2000, 3000, 4000] #The minimum required chips to be a member of each tier
 
 cont=True
-players={} #plid: playerinstance
-games=[] #list of all gameinstance's
+players={} #plid: player instance
+games={} #gmid: game instance 
+
+
 
 
 def sendBotRequest(requestName):
@@ -64,6 +70,22 @@ def getLeaderboard(): #Returns a list of the people with the most chips, greates
         topScores.append([key,value])
     return topScores
 
+def getGameList(): #Returns a list of the games currently running/waiting for players -- UNTESTED
+    tieredGames={}
+    for i in range(1,len(TIER_CUTOFFS)+1):
+        tieredGames[i]=[]
+    for j in games.values():
+        retString=""
+        if(j.phase=="wait"):
+            retString+="Waiting for players, "
+        else:
+            retString+="In progress, "
+        retString+="%d players." %len(j.players)
+        tieredGames[j.tier].append(retString)
+    return tieredGames
+
+
+
 def processCommand(usrReq):
     global cont
     global players
@@ -93,12 +115,24 @@ def processCommand(usrReq):
             try:
                 tiernum=int(cmdList[1])
             except ValueError:
-                sendMessage(userid,"Usage: /startgame [tier], where [tier] is the tier the game is on from %d to %d." %(0,len(TIER_CUTOFFS)) )
+                sendMessage(userid,"Usage: /startgame [tier], where [tier] is the tier the game is on from %d to %d." %(1,len(TIER_CUTOFFS)) )
+                return
+            except IndexError:
+                sendMessage(userid,"Usage: /startgame [tier], where [tier] is the tier the game is on from %d to %d." %(1,len(TIER_CUTOFFS)) )
+                return
+            if(not 0<tiernum<=len(TIER_CUTOFFS)):
+                sendMessage(userid,"Usage: /startgame [tier], where [tier] is the tier the game is on from %d to %d." %(1,len(TIER_CUTOFFS)) )
                 return
             newGame(tiernum)
 
         elif(cmdList[0]=="/gamestats"):
-            print("UNIMPLEMENTED")
+            retString="List of games currently active:"
+            tieredGames=getGameList()
+            for i in tieredGames.keys():
+                retString+="\nTIER %d" %i
+                for j in tieredGames[i]:
+                    retString+=("\n"+j)
+            sendMessage(userid,retString)
 
     #USER COMMANDS
     if(reqtext=="/start"):
@@ -161,6 +195,7 @@ def processCommand(usrReq):
     
 def newGame(tiernum):
     print("Starting new game for tier %d." %tiernum)
+    #Access the array with tiernum-1
 
 def main():
     #Initialization here

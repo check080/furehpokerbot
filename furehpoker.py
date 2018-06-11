@@ -19,6 +19,7 @@ class player:
         self.currentGame=0 #Player's current game id
         self.currentGameInvite=0 #Player's invite game id
         self.holding=False
+        self.draws=0
         self.hand={}
 
     def updateTier(self):
@@ -31,6 +32,9 @@ class player:
                 break
             retNum=i+1
         self.tier=retNum
+
+    def getHand(self):
+        return "I dunno dude"
             
     def acceptResponse(self,reqtext): #All user text is sent here when they are mid-game
         curGame=games[self.currentGame]
@@ -39,7 +43,14 @@ class player:
             if(curGame.phase=="hand"):
                 if(reqtext=="HOLD"):
                     self.holding=True
-                    curGame.
+                    curGame.consecutiveHolds+=1
+                    curGame.nextTurn()
+                elif(reqtext=="DRAW"):
+                    if(self.draws>=MAX_DRAWS):
+                        sendMessage(self.id,"You can't draw more than %d times." %MAX_DRAWS)
+                    else:
+                        self.draws+=1
+                        #ALSO THE REST OF IT
                 
 
 class game:
@@ -47,7 +58,7 @@ class game:
         self.id=gmid
         self.tier=tiernum #the tier of players this game is open to
         self.phase="wait" #can be wait, hand, or bet
-        self.players=[] #list of all playing plid's
+        self.pPlaying=[] #list of all playing plid's
         self.currentTurn=0 #array index of which player's turn it is
         self.consecutiveHolds=0 #number of holds in a row; if this >= len(players) then startBet is triggered
         self.invites=[] #list of all invited plid's
@@ -63,9 +74,22 @@ class game:
                 i.currentGameInvite=gmid
     def startHand(self):
         self.phase="hand"
-        #give everyone 5 cards from the deck, then go one person at a time waiting for either a response or the expiration of the timer object
-    def nextHandTurn(self):
-        self.currentTurn=(self.currentTurn+1)%len(players)
+        #Revoke all remaining invites
+        for i in players.values():
+            if(i.currentGameInvite==gmid):
+                i.currentGameInvite=0
+        #Give everyone 5 cards from the deck, then go one person at a time waiting for either a response or the expiration of the timer object
+    def nextTurn(self):
+        self.currentTurn=(self.currentTurn+1)%len(self.pPlaying)
+        if(self.phase=="hand"):
+            if(self.consecutiveHolds>=len(self.pPlaying): #if it's gone in a circle and everyone held
+               self.startBet()
+            else:
+                self.handTurn(self.pPlaying[self.currentTurn])
+        elif(self.phase=="bet"):
+            self.betTurn(self.pPlaying[self.currentTurn])
+    def handTurn(self,plid):
+        sendMessage(plid,"Cards: "+players[plid].getHand()+"\n"+makeKeyboard(["HOLD"],["DRAW"]) )
     def startBet(self):
         print("Nothing here yet")
     def endGame(self):
@@ -82,6 +106,7 @@ TIER_CUTOFFS=[0, 1000, 2000, 3000, 4000] #The minimum required chips to be a mem
 MAX_SIMULTANEOUS_GAMES=40
 STARTING_CHIPS=1000
 MAX_PLAYERS_PER_GAME=2 #will change later
+MAX_DRAWS=2
 
 cont=True
 players={} #plid: player instance
@@ -139,6 +164,14 @@ def getGameList(): #Returns a list of the games currently running/waiting for pl
         retString+="%d players." %len(j.players)
         tieredGames[j.tier].append(retString)
     return tieredGames
+
+def makeKeyboard(btnList): #Accepts list of buttons e.g. makeKeyboard(["HOLD","DRAW"])
+    retString="&reply_markup={\"keyboard\":[["
+    retString+=btnList[0]
+    for i in btnList[1:]:
+        retString+=",\""+i+"\""
+    retString+="]],\"one_time_keyboard\":true}"
+    return retString
 
 
 
@@ -231,12 +264,14 @@ def processCommand(usrReq):
             newGame(self.tier,userid)
         else:
             players[userid].currentGame=players[userid].currentGameInvite #join the game
-            players[userid].currentGameInvite=0 #clear invites
+            players[userid].currentGameInvite=0 #clear invite
             retString="Joined game. Users at the table:"
-            for i in games[players[userid].currentGame].players:
+            for i in games[players[userid].currentGame].pPlaying:
                 retString+=("\n@"+players[i].username) #print usernames of everyone in the game lobby
                 sendMessage(i,"%s has joined the table." %username) #also tell everyone in the lobby that you joined
             sendMessage(userid,retString)
+            if(len(games[players[userid].currentGame].pPlaying)>=MAX_PLAYERS_PER_GAME): #start the game if the lobby is full
+                games[players[userid].currentGame].beginGame()
 
     elif(reqtext=="/offline"):
         if(players[userid].online):

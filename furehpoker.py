@@ -89,7 +89,10 @@ class game:
         elif(self.phase=="bet"):
             self.betTurn(self.pPlaying[self.currentTurn])
     def handTurn(self,plid):
-        sendMessage(plid,"Cards: "+players[plid].getHand()+"\n"+makeKeyboard(["HOLD"],["DRAW"]) )
+        if(players[plid].draws>=MAX_DRAWS):
+               sendMessage(plid,"Cards: "+players[plid].getHand()+"\n"+makeKeyboard(["HOLD"]) )
+        else:
+            sendMessage(plid,"Cards: "+players[plid].getHand()+"\n"+makeKeyboard(["HOLD","DRAW"]) )
     def startBet(self):
         print("Nothing here yet")
     def endGame(self):

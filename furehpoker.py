@@ -2,14 +2,14 @@ import requests
 import json
 
 class player:
-    def __init__(plid):
+    def __init__(self,plid):
         self.id=plid
         self.chips=1000
         self.currentGame=0
         self.online=True
 
 class game:
-    def __init__():
+    def __init__(self):
         self.phase="wait" #can be wait, hand, or bet
         self.players=[] #list of all plid's
         self.hands={} #plid: hand
@@ -27,8 +27,8 @@ games=[] #list of all gameinstance's
 def sendBotRequest(requestName):
     return requests.get(ACCESS_WEBSITE+requestName).content
 
-def botUpdate():
-    jsonData=json.loads(sendBotRequest("getupdates"))
+def botUpdate(num):
+    jsonData=json.loads(sendBotRequest("getupdates?offset=%d" %num))
     try:
         if(jsonData["ok"]==True):
             return jsonData["result"]
@@ -54,26 +54,29 @@ def processCommand(usrReq):
             sendMessage(userid,"Welcome back to Fur-Eh poker. Your balance is %d chips." %players[userid].chips )
         else: #if they aren't
             players[userid]=player(userid) #add a dict entry with a new instance of the player class
-            sendMessage(userid,"Welcome message. Explanation text. Type /help for more commands. Your balance is %d." %players[userid].chips )
+            sendMessage(userid,"Welcome to Fur-Eh poker. Explanation text. Type /help for more commands. Your balance is %d chips." %players[userid].chips )
 
-    if(userid in ADMIN_IDS):
+    #if(userid in ADMIN_IDS):
         #ADMIN COMMANDS
     
 
-def timerEvent(curTime):
-    print(curTime)
-
 def main():
-    timers=[]
+    numClear=0
     
     while cont:
 
         #CHECK FOR PLAYER INPUT
-        reqBuf=botUpdate() #this takes time
+        reqBuf=botUpdate(numClear) #this takes time
         if(reqBuf):
+                
             for i in reqBuf:
                 try:
+                    
+                    if((i["update_id"]+1)>numClear): #find the highest update_id so they can be cleared
+                        numClear=i["update_id"]+1
+                        
                     processCommand(i["message"])
+                    
                 except KeyError:
                     continue
 

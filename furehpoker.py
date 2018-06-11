@@ -51,7 +51,16 @@ def findNumOnline(): #Returns the number of people online
     return totalOnline
 
 def getLeaderboard(): #Returns a list of the people with the most chips, greatest to least
-    print("I gave up sorry")
+    scoreList={}
+    for i in players.values():
+        scoreList[i.username]=i.chips
+    topScores=[]
+    numAppended=0
+    for key, value in reversed(sorted(scoreList.items(), key=(lambda k: k[1]) )):
+        if(numAppended>=LEADERBOARD_NUM):
+            break
+        topScores.append([key,value])
+    return topScores
 
 def processCommand(usrReq):
     global cont
@@ -73,9 +82,11 @@ def processCommand(usrReq):
         else: #if they aren't
             players[userid]=player(userid,username) #add a dict entry with a new instance of the player class
             sendMessage(userid,"Welcome to Fur-Eh poker. Explanation text. Type /help for more commands. Your balance is %d chips." %players[userid].chips )
+        sendMessage(userid,"%d players online." %findNumOnline())
 
-    elif(reqtext=="/stop"):
-        players[userid].online=False
+    elif(not userid in players.keys() ): #if the player hasn't yet said /start
+        sendMessage(userid,"Start the bot with /start.")
+        return #don't let them do any other commands
 
     elif(reqtext=="/offline"):
         if(players[userid].online):
@@ -89,6 +100,15 @@ def processCommand(usrReq):
             sendMessage(userid,"You are already marked as online.")
         else:
             sendMessage(userid,"Ok, you will now receive poker game invitations.")
+        sendMessage(userid,"%d players online." %findNumOnline())
+        players[userid].online=True
+
+    elif(reqtext=="/getLeaderboard"):
+        leaderList=getLeaderboard()
+        retText=""
+        for i in leaderList:
+            retText+="\n%s: %s" %(i[0],i[1])
+        sendMessage(userid,"Top chips:"+retText)
         
     if(userid in ADMIN_IDS):
         #ADMIN COMMANDS

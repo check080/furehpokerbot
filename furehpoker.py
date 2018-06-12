@@ -30,6 +30,7 @@ GAME_START_TIME_LIMIT=300.0 #In seconds, float
 cont=True
 players={} #plid: player instance
 games={} #gmid: game instance
+gamesFrozen=False
 
 
 
@@ -284,6 +285,7 @@ def processCommand(usrReq):
     global cont
     global players
     global games
+    global gamesFrozen
 
     userid=usrReq["from"]["id"]
     username=usrReq["from"]["username"]
@@ -322,7 +324,7 @@ def processCommand(usrReq):
                 return
             newGame(tiernum)
 
-        elif(cmdList[0]=="/gamestats"):
+        elif(cmdList[0]=="/gamestats"): #UNTESTED
             retString="List of games currently active:"
             tieredGames=getGameList()
             for i in tieredGames.keys():
@@ -330,6 +332,14 @@ def processCommand(usrReq):
                 for j in tieredGames[i]:
                     retString+=("\n"+j)
             sendMessage(userid,retString)
+
+        elif(cmdList[0]=="/freeze"): #UNTESTED
+            gamesFrozen=True
+            sendMessage(userid,"Games frozen. Noone will be able to create a new game as long as this is on. Use /resume to unfreeze.")
+
+        elif(cmdList[0]=="/resume"):
+            gamesFrozen=False
+            sendMessage(userid,"Games resumed. Players can start new games again.")
 
     #USER COMMANDS
     if(reqtext=="/start"):
@@ -349,7 +359,9 @@ def processCommand(usrReq):
                   "/offline - Stop receiving invitations\n" \
                   "/getleaderboard - Show the top players and their chips\n" \
                   "/join - Join the game you've been invited to\n" \
-                  "You cannot use these commands while in the middle of a game."
+                  "/rules - See the rules of 5-card poker\n" \
+                  "/hands - See a list of poker hands\n" \
+                  "/balance - See how many chips you have"
         sendMessage(userid,retString)
 
     elif(reqtext=="/getleaderboard"):
@@ -358,6 +370,15 @@ def processCommand(usrReq):
         for i in leaderList:
             retText+="\n%s: %s" %(i[0],i[1])
         sendMessage(userid,retText)
+
+    elif(reqtext=="/rules"):
+        sendMessage(userid,"POKER RULES GO HERE")
+
+    elif(reqtext=="/hands"):
+        sendMessage(userid,"LIST OF POKER HANDS GOES HERE")
+
+    elif(reqtext=="/balance"):
+        sendMessage(userid,"You currently have %d chips." %players[userid].chips)
 
     elif(not userid in players.keys() ): #if the player hasn't yet said /start
         sendMessage(userid,"Start the bot with /start.")
@@ -368,7 +389,7 @@ def processCommand(usrReq):
             games[players[userid].currentGame].removePlayer(userid)
             sendMessage(userid,"Removed from the game.")
         elif(reqtext[0]=="/"):
-            sendMessage(userid,"You can't use bot commands in the middle of a game.")
+            sendMessage(userid,"You can't use that command in the middle of a game.")
         else:
             players[userid].acceptResponse(reqtext)
 
@@ -378,7 +399,10 @@ def processCommand(usrReq):
         elif(players[userid].currentTier==0):
             sendMessage(userid,"Sorry, you don't have enough chips to continue playing. Have a fun Fur-Eh!")
         elif(players[userid].currentGameInvite==0):
-            newGame(players[userid].currentTier,userid)
+            if(gamesFrozen):
+                sendMessage(userid,"An admin has stopped the creation of new games. Your chip count is now final. Have a fun Fur-Eh!"
+            else:
+                newGame(players[userid].currentTier,userid)
         else:
             retString="Joined game. Users at the table:"
             for i in games[players[userid].currentGameInvite].pPlaying:

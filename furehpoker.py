@@ -6,7 +6,6 @@ from random import shuffle
 #Filter chat input so it follows UTF-8 (ASCII?)
 #Make some of the information text more helpful please
 #Introduce timers so that default options activate after a time limit
-#Tell people how long they will wait (at most)
 #Replace the invite system
 
 BOT_TOKEN="598223102:AAGRkSBjoZV2KMKLtGAFB7xlMJnN1xShpTA"
@@ -26,7 +25,7 @@ DRAW_COSTS=[10,20] #The price of drawing based on which turn, needs to be MAX_DR
 CARDS_PER_HAND=5
 CARD_DECKS=1 #Decks worth of cards used in each game
 RESPONSE_TIME_LIMIT=120.0 #In seconds, float
-GAME_START_LIMIT=300.0 #In seconds, float
+GAME_START_TIME_LIMIT=300.0 #In seconds, float
 
 cont=True
 players={} #plid: player instance
@@ -82,7 +81,7 @@ class player:
             if(reqtext=="HOLD"):
                 self.holding=True
                 self.awaitingInput="none"
-                sendMessage(self.id,"Waiting for the other players...")
+                sendMessage(self.id,"Waiting for the other players... %2.0f minutes maximum" %RESPONSE_TIME_LIMIT/60)
                 curGame.handTurn(self.id)
             elif(reqtext=="DRAW"):
                 sendMessage(self.id,"Here's the format") #fix this please
@@ -108,7 +107,7 @@ class player:
                 self.awaitingInput="none"
                 #Charge the player appropriately.
                 self.chips-=DRAW_COSTS[curGame.currentHandRound]
-                sendMessage(self.id,"%d chips removed.\nWaiting for the other players..."%DRAW_COSTS[curGame.currentHandRound])
+                sendMessage(self.id,"%d chips removed.\nWaiting for the other players... %2.0f minutes maximum"%(DRAW_COSTS[curGame.currentHandRound],RESPONSE_TIME_LIMIT/60) )
                 #Then swap the specified cards out
                 for j in numList:
                     print("[DEBUG] Replacing %s with " %self.hand[j].getName(),end="")
@@ -416,7 +415,7 @@ def newGame(tiernum,creatorid):
     else:
         games[gmid]=game(gmid,tiernum,creatorid)
         players[creatorid].currentGame=gmid
-        sendMessage(creatorid,"New game created. Game will start in 10 minutes at most. Waiting for players...")
+        sendMessage(creatorid,"New game created. Game will start in %2.0f minutes at most. Waiting for players..." %GAME_START_TIME_LIMIT/60)
         #START A TIMER
 
 def main():

@@ -3,6 +3,7 @@ import json
 from random import shuffle
 
 #TODO:
+#TEST the admin commands
 #Filter chat input so it follows UTF-8 (ASCII?)
 #Make some of the information text more helpful please
 #Introduce timers so that default options activate after a time limit
@@ -83,6 +84,9 @@ class player:
                 self.holding=True
                 self.awaitingInput="none"
                 sendMessage(self.id,"Waiting for the other players... %2.0f minutes maximum" %RESPONSE_TIME_LIMIT/60)
+                for i in curGame.pPlaying:
+                    if(i!=self.id):
+                        sendMessage(i,"@%s is holding." %self.username)
                 curGame.handTurn(self.id)
             elif(reqtext=="DRAW"):
                 sendMessage(self.id,"Here's the format") #fix this please
@@ -117,10 +121,13 @@ class player:
                     self.hand.insert(j,curGame.deck[-1])
                     print("%s" %curGame.deck[-1].getName())
                     curGame.deck.pop()
+                #Tell everyone
+                for i in curGame.pPlaying:
+                    if(i!=self.id):
+                        sendMessage(i,"@%s drew %d cards." %(self.username,len(numList)) )
                 curGame.handTurn(self.id)
-        elif(self.awaitingInput=="betturn"):
-            if(curGame.pPlayers[curGame.currentPlayerTurn]==self.id): #if it's your turn, check for event listeners
-                print("UNIMPLEMENTED")
+        elif(self.awaitingInput=="betturn" and curGame.pPlayers[curGame.currentPlayerTurn]==self.id):#if it's your turn, check for event listeners
+            print("UNIMPLEMENTED")
 
 class game:
     def __init__(self,gmid,tiernum,creatorid):

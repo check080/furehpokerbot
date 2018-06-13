@@ -45,9 +45,12 @@ class player:
                         sendMessage(i,"@%s is holding." %self.username)
                 curGame.handTurn(self.id)
             elif(reqtext=="DEAL"):
-                sendMessage(self.id,"Type the number or the name of a card to swap it out. You can swap out as many cards as you'd like. Type DONE when you're done swapping cards out." +makeKeyboard([i.getName() for i in self.hand]+["DONE"]))
-                self.swapcards=[]
-                self.awaitingInput="dealcards"
+                if(self.chips<DEAL_COSTS[curGame.currentHandRound]):
+                    sendMessage(self.id,"You don't have enough chips. Dealing costs %s." %DEAL_COSTS[curGame.currentHandRound])
+                else:
+                    sendMessage(self.id,"Type the number or the name of a card to swap it out. You can swap out as many cards as you'd like. Type DONE when you're done swapping cards out." +makeKeyboard([i.getName() for i in self.hand]+["DONE"]))
+                    self.swapcards=[]
+                    self.awaitingInput="dealcards"
                 
             else:
                 curGame.sendChat(self.id,reqtext)

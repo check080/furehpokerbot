@@ -73,8 +73,16 @@ def processCommand(usrReq):
     userid=usrReq["from"]["id"]
     username=usrReq["from"]["username"]
     reqtext=usrReq["text"]
+
+    #FILTER THE TEXT
+    filter(lambda x: x in LEGAL_CHARS, reqtext)
+    reqtext=(reqtext.encode('ascii', 'ignore')).decode("utf-8")
+    for i in reqtext:
+        if(ord(i)<32 or ord(i)>126):
+            reqtext=reqtext.replace(i,"")
+    if(len(reqtext)<1):
+        return
     
-    filter(lambda x: x in printable, reqtext) #FILTER THE TEXT
     print("FROM %d (%s): %s" %(userid,username,reqtext) ) #print it
 
     if(userid in ADMIN_IDS):
@@ -146,7 +154,10 @@ def processCommand(usrReq):
             sendMessage(userid,"Welcome back to Fur-Eh poker. Your balance is %d chips." %players[userid].chips )
         else: #if they aren't
             players[userid]=player(userid,username,STARTING_CHIPS) #add a dict entry with a new instance of the player class
-            sendMessage(userid,"Welcome to Fur-Eh poker. Type /rules to learn to play, or /join to join a game. Type /help for more commands. Your balance is %d chips." %players[userid].chips )
+            sendMessage(userid,"Welcome to Fur-Eh poker. Type /rules to learn to play, or /join to join a game." +
+                               "Type /help for more commands. Your balance is %d chips." %players[userid].chips +
+                               "\nOnce you run out of chips you will not be able to play for THE REST of fur-eh." +
+                               "\nIf you have questions, message @check080")
 
     elif(reqtext=="/help"):
         retString="Bot Commands:\n" \
@@ -154,7 +165,8 @@ def processCommand(usrReq):
                   "/help - Get a list of commands\n" \
                   "/getleaderboard - Show the top players and their chips\n" \
                   "/join - Join the game you've been invited to\n" \
-                  "/rules - See the rules of 5-card poker\n" \
+                  "/leave - Leave a game you're in\n" \
+                  "/rules - See the rules of this version of 5-card poker\n" \
                   "/hands - See a list of poker hands\n" \
                   "/balance - See how many chips you have"
         sendMessage(userid,retString)

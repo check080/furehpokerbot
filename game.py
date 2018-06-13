@@ -27,6 +27,10 @@ class game:
         players[userid].gameInit()
         if(len(self.pPlaying)==0):
             self.destroyGame()
+    def sendChat(self,plid,text):
+        for i in self.pPlaying:
+            if(i!=plid):
+                sendMessage(i,"@%s: %s"%(players[plid].username,text))
     def beginGame(self):
         print("New game started")
     def startHand(self):
@@ -49,8 +53,8 @@ class game:
             players[i].awaitingInput="handturn" #An event listener answered by player.acceptResponse
             sendMessage(i,"Game start! %d of your chips have been placed into the pot."%self.entryCost+
                         "\nCards: "+players[i].getHand()+
-                        ("\n\nOptions:\nHOLD - keep your hand, free\nDRAW - swap out any cards, %d chips"%DRAW_COSTS[self.currentHandRound])+
-                        makeKeyboard(["HOLD","DRAW"]) )
+                        "\n\nOptions:\nHOLD - keep your hand, free\nDEAL - swap out any cards, %d chips"%DEAL_COSTS[self.currentHandRound]+
+                        makeKeyboard(["HOLD","DEAL"]) )
     def handTurn(self,userid):
         self.playersConfirmed[userid]=True
         if(len(self.playersConfirmed)>=len(self.pPlaying)): #if everyone is confirmed trigger the next turn
@@ -62,17 +66,24 @@ class game:
                 if(players[i].holding):
                     numHolding+=1
                     self.playersConfirmed[i]=True #auto-hold if they held last turn
-            if(self.currentHandRound==MAX_DRAWS): #if people used up 2 draws or everyone is holding
+            if(self.currentHandRound==MAX_DEALS): #if people used up 2 deals
                 self.currentHandRound=0 #for safety
+                for i in self.pPlaying:
+                    if(not players[i].holding):
+                        sendMessage(i,"Final hand: "+players[i].getHand())
                 self.endGame() #self.startBet()
-            elif(numHolding==len(self.pPlaying)):
+            elif(numHolding==len(self.pPlaying)): #if everyone is holding
                 self.currentHandRound=0 #for safety
                 self.endGame() #self.startBet()
             else:
                 for i in self.pPlaying:
                     if(not players[i].holding):
                         players[i].awaitingInput="handturn" #An event listener answered by player.acceptResponse
-                        sendMessage(i,"Cards: "+players[i].getHand()+makeKeyboard(["HOLD","DRAW"]) )
+                        sendMessage(i,"Cards: "+players[i].getHand()+
+                        "\n\nOptions:\nHOLD - keep your hand, free\nDEAL - swap out any cards, %d chips"%DEAL_COSTS[self.currentHandRound]+
+                        makeKeyboard(["HOLD","DEAL"]) )
+                    else:
+                        sendMessage(i,"Wait for the other players to finish the second round of dealing... %2.0f minutes maximum" %(RESPONSE_TIME_LIMIT/60))
     def startBet(self):
         self.currentTurn=0
         sendMessage(self.pPlaying[self.currentTurn],"The current bet is %d."%self.currentBet+"Cards: "+players[self.pPlaying[self.currentTurn]].getHand()+makeKeyboard(["FOLD","CALL","RAISE"]))
@@ -85,7 +96,7 @@ class game:
         #Check which player(s) won, give them the pot
         winArray=getBestHand({i:players[i].hand for i in self.pPlaying}) #CHANGE THIS TO THE LIST OF PEOPLE THAT DIDN'T FOLD
         for plid in winArray[0]:
-            players[plid].chips+=(self.pot/len(winArray[0]))
+            players[plid].chips+=int(self.pot/len(winArray[0]))
         self.destroyGame()
         for i in self.pPlaying:
             sendMessage(i,winArray[1]+"\nEach winner received %d chips.\n"%(self.pot/len(winArray[0]))+"End of the game. Type /join to join another one.")
@@ -105,6 +116,8 @@ def getBestHand(handDict):
     
     for plid,hand in handDict.items():
         highestCard=2
+        highestPair=2
+        highestTriple=2
         rankNumbers={i.rankid:0 for i in hand}
         suitNumbers={i.suitid:0 for i in hand}
         for i in hand:
@@ -128,6 +141,13 @@ def getBestHand(handDict):
                 hasStraight=True
                 if(i.rankid==10):
                     hasRoyalStraight=True
+        for i,j in rankNumbers.items():
+            if(j==2): #find the highest pair
+                if(i>highestPair):
+                    highestPair=i
+            elif(j>=2): #find the highest triple
+                if(i>highestTriple):
+                    highestTriple=i
                     
         #check all scores from greatest to least
         curScore=0
@@ -160,7 +180,7 @@ def getBestHand(handDict):
             curScore=1
         else:
             curScore=0
-        scoreDict[plid]=[curScore,highestCard]
+        scoreDict[plid]=[curScore,highestCard,highestPair,highestTriple]
         
     #find the highest score
     highestScore=0
@@ -174,24 +194,31 @@ def getBestHand(handDict):
     retString=""
     #check for tie, if so, give to high card
     if(len(winningPlayer)>1):
-        highestCard=2
-        highestCardPlayer=[]
+        cardCheckIndex=1
+        cardCheckLUT={1:"card",2:"pair",3:"triple"}
+        if(highestScore==1 or highestScore==2):
+            cardCheckIndex=2
+        elif(highestScore==3 or highestScore==6 or highestScore==7):
+            cardCheckIndex=3
+        else: #Winner is the one with highest card if it's not an of-a-kind
+            cardCheckIndex=1
+        highestSecondary=2
+        highestSecondaryPlayer=[]
         for plid in winningPlayer:
-            if(scoreDict[plid][1]>highestCard):
-                highestCard=scoreDict[plid][1]
-                highestCardPlayer=[plid]
-            elif(scoreDict[plid][1]==highestCard):
-                highestCardPlayer.append(plid)
-        #Winner is the one with highest card
-        winningPlayer=highestCardPlayer
+            if(scoreDict[plid][cardCheckIndex]>highestSecondary):
+                highestSecondary=scoreDict[plid][cardCheckIndex]
+                highestSecondaryPlayer=[plid]
+            elif(scoreDict[plid][cardCheckIndex]==highestSecondary):
+                highestSecondaryPlayer.append(plid)
+        winningPlayer=highestSecondaryPlayer
         #If there are multiple
         if(len(winningPlayer)>1):
-            retString+="Tie between %d" %winningPlayer[0]
+            retString+="Tie between @%s" %players[winningPlayer[0]].username
             for plid in winningPlayer[1:]:
-                retString+=" and %d" %plid
-            retString+=" for %s with highest card %s" %(SCORE_DICT[highestScore],RANK_DICT[highestCard])
+                retString+=" and @%s" %players[plid].username
+            retString+=" for %s with highest %s %s" %(SCORE_DICT[highestScore],cardCheckLUT[cardCheckIndex],RANK_DICT[highestSecondary])
         else:
-            retString+="%d wins for %s with highest card %s" %(winningPlayer[0],SCORE_DICT[highestScore],RANK_DICT[highestCard])
+            retString+="@%s wins for %s with highest %s %s" %(players[winningPlayer[0]].username,SCORE_DICT[highestScore],cardCheckLUT[cardCheckIndex],RANK_DICT[highestSecondary])
     else:
-        retString+="%d wins for %s" %(winningPlayer[0],SCORE_DICT[highestScore])
+        retString+="@%s wins for %s" %(players[winningPlayer[0]].username,SCORE_DICT[highestScore])
     return [winningPlayer,retString]

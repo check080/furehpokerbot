@@ -3,10 +3,10 @@ from game import game
 from player import player
 
 #TODO:
-#TEST the admin commands
-#Filter chat input so it follows UTF-8 (ASCII?)
-#Make some of the information text more helpful please
+#Add rules and a list of poker hands
 #Introduce timers so that default options activate after a time limit
+#Add a betting phase
+#Add saving
 
 #Global variables
 cont=True
@@ -31,7 +31,7 @@ def getLeaderboard(): #Returns a list of the people with the most chips, greates
         topScores.append([key,value])
     return topScores
 
-def getGameList(): #Returns a list of the games currently running/waiting for players -- UNTESTED
+def getGameList(): #Returns a list of the games currently running/waiting for players
     tieredGames={}
     for i in range(1,len(TIER_CUTOFFS)+1):
         tieredGames[i]=[]
@@ -73,8 +73,9 @@ def processCommand(usrReq):
     userid=usrReq["from"]["id"]
     username=usrReq["from"]["username"]
     reqtext=usrReq["text"]
-
-    print("FROM %d (%s): %s" %(userid,username,reqtext) ) #THIS will break if someone types arabic
+    
+    filter(lambda x: x in printable, reqtext) #FILTER THE TEXT
+    print("FROM %d (%s): %s" %(userid,username,reqtext) ) #print it
 
     if(userid in ADMIN_IDS):
         cmdList=reqtext.split(" ")
@@ -108,7 +109,7 @@ def processCommand(usrReq):
                 return
             newGame(tiernum)
 
-        elif(cmdList[0]=="/gamestats"): #UNTESTED
+        elif(cmdList[0]=="/gamestats"):
             retString="List of games currently active:"
             tieredGames=getGameList()
             for i in tieredGames.keys():
@@ -117,7 +118,7 @@ def processCommand(usrReq):
                     retString+=("\n"+j)
             sendMessage(userid,retString)
 
-        elif(cmdList[0]=="/freeze"): #UNTESTED
+        elif(cmdList[0]=="/freeze"):
             gamesFrozen=True
             sendMessage(userid,"Games frozen. Noone will be able to create a new game as long as this is on. Use /resume to unfreeze.")
 
@@ -125,11 +126,12 @@ def processCommand(usrReq):
             gamesFrozen=False
             sendMessage(userid,"Games resumed. Players can start new games again.")
 
-        elif(cmdList[0]=="/setbalance"):
+        elif(cmdList[0]=="/setbalance"): #UNTESTED
             try:
                 targetID=int(cmdList[1])
                 balanceAMT=int(cmdList[2])
                 players[targetID].chips=balanceAMT
+                players[targerID].updateTier()
                 sendMessage(userid,"Chips of %d set to %d." %(targetID,players[targetID].chips) )
             except IndexError:
                 sendMessage(userid,"Not enough arguments, expected 2: /setbalance [playerid] [amount]")
@@ -180,9 +182,9 @@ def processCommand(usrReq):
     elif(players[userid].currentGame!=0): #if the player is in the middle of a game
         if(reqtext=="/leave"):
             games[players[userid].currentGame].removePlayer(userid)
-            sendMessage(userid,"Removed from the game.")
-        elif(reqtext[0]=="/"):
-            sendMessage(userid,"You can't use that command in the middle of a game.")
+            sendMessage(userid,"Removed from the game."+removeKeyboard())
+        elif(reqtext[0]=="/join"):
+            sendMessage(userid,"You can't use that command in the middle of a game. Use /leave to leave your current game.")
         else:
             players[userid].acceptResponse(reqtext)
 
@@ -208,7 +210,7 @@ def processCommand(usrReq):
     
 
 def main():
-    #Load ffrom file
+    #Load from file
     for i in players.values():
         sendMessage(i.id,"Server restarted. Any previously ongoing games were terminated. Sorry for any inconvenience.")
     print("Initialized.")

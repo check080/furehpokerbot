@@ -23,6 +23,8 @@ class game:
     def removePlayer(self,userid):
         if(userid in self.pPlaying):
             self.pPlaying.remove(userid)
+            for plid in self.pPlaying:
+                sendMessage(plid,"%s has left the table." %players[userid].username)
         players[userid].currentGame=0
         players[userid].gameInit()
         if(len(self.pPlaying)==0):

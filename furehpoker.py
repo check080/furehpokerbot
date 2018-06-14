@@ -66,6 +66,7 @@ def processCommand(usrReq):
     global cont
     global players
     global games
+    global blockist
     global gamesFrozen
 
     userid=usrReq["from"]["id"]
@@ -79,6 +80,8 @@ def processCommand(usrReq):
         if(ord(i)<32 or ord(i)>126):
             reqtext=reqtext.replace(i,"")
     if(len(reqtext)<1):
+        return
+    if(userid in blocklist):
         return
     cmdList=reqtext.split(" ")
     
@@ -99,7 +102,8 @@ def processCommand(usrReq):
                       "/freeze - stop game events, stop sending invites\n" \
                       "/resume - continue game events and invites\n" \
                       "/setbalance [userid] [amount] - set a player's chip number\n" \
-                      "/notify [text] - make an announcement to everyone on the user list"
+                      "/notify [text] - make an announcement to everyone on the user list\n" \
+                      "/block [userid] - ignore all future input from a person"
             sendMessage(userid,retString)
             
         elif(cmdList[0]=="/startgame"):
@@ -155,6 +159,16 @@ def processCommand(usrReq):
                     sendMessage(i,retString)
             except IndexError:
                 sendMessage(userid,"No text found in first argument.")
+                
+        elif(cmdList[0]=="/block"):
+            try:
+                targetID=int(cmdList[1])
+                blocklist.append(targetID)
+                sendMessage(userid,"Blocked user %d." %targetID)
+            except IndexError:
+                sendMessage(userid,"Not enough arguments, expected 2: /block [playerid]")
+            except ValueError:
+                sendMessage(userid,"Argument is in the wrong type, expected an integer: /block [playerid]")
 
     #USER COMMANDS
     if(cmdList[0]=="/start"):
@@ -203,15 +217,15 @@ def processCommand(usrReq):
 
     elif(cmdList[0]=="/hands"):
         sendMessage(userid,"From best to worst:\n" \
-                           "Royal Flush, 10 J Q K A, all the same suit\n" \
-                           "Straight Flush, any 5 consecutive cards, all the same suit\n" \
-                           "4 of a kind, any 4 cards of the same rank\n" \
-                           "Full house, 2 cards of the same rank and 3 cards of the same rank\n" \
-                           "Flush, all cards are the same suit\n" \
-                           "Straight, any 5 consecutive cards\n" \
-                           "3 of a kind, any 3 cards of the same rank\n" \
-                           "2 pairs, 2 cards of the same rank and another 2 cards of the same rank\n" \
-                           "1 pair, 2 cards of the same rank\n" \
+                           "1) Royal Flush, 10 J Q K A, all the same suit\n" \
+                           "2) Straight Flush, any 5 consecutive cards, all the same suit\n" \
+                           "3) 4 of a kind, any 4 cards of the same rank\n" \
+                           "4) Full house, 2 cards of the same rank and 3 cards of the same rank\n" \
+                           "5) Flush, all cards are the same suit\n" \
+                           "6) Straight, any 5 consecutive cards\n" \
+                           "7) 3 of a kind, any 3 cards of the same rank\n" \
+                           "8) 2 pairs, 2 cards of the same rank and another 2 cards of the same rank\n" \
+                           "9) 1 pair, 2 cards of the same rank\n" \
                            "If noone has one of these hands, highest card wins")
 
     elif(cmdList[0]=="/balance"):
@@ -250,6 +264,9 @@ def processCommand(usrReq):
                     sendMessage(userid,"An admin has stopped the creation of new games. Your chip count is now final. Have a fun Fur-Eh!")
                 else:
                     newGame(players[userid].currentTier,userid)
+
+    else:
+        sendMessage(userid,"Command not found.")
     
 
 def main():
@@ -269,16 +286,24 @@ def main():
         if(reqBuf==False):
             sendMessage(ADMIN_IDS[0],"Fatal error: failed to process telegram api update data.")
         else:
+            
+            if(len(reqBuf)>MAX_BUFFER_LENGTH): #block people if they causin shit
+                print("[LOG] Buffer skip.")
+                numClear=reqBuf[-1]["update_id"]+1
+                processCommand({"from":{"id":ADMIN_IDS[0], "username":"NULL"}, "text":"/block %d" %reqBuf[-1]["message"]["from"]["id"]})
+            else:
                 
-            for i in reqBuf:
-                try:
+                for i in reqBuf:
+                    try:
                     
-                    if((i["update_id"]+1)>numClear): #find the highest update_id so they can be cleared
-                        numClear=i["update_id"]+1
+                        if((i["update_id"]+1)>numClear): #find the highest update_id so they can be cleared
+                            numClear=i["update_id"]+1
                         
-                    processCommand(i["message"])
+                        processCommand(i["message"])
                     
-                except KeyError:
-                    continue
+                    except KeyError:
+                        continue
+                    
+        botUpdate(numClear)
 
 main()

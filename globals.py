@@ -24,12 +24,14 @@ CARDS_PER_HAND=5
 CARD_DECKS=1 #Decks worth of cards used in each game
 RESPONSE_TIME_LIMIT=120.0 #In seconds, float
 GAME_START_TIME_LIMIT=300.0 #In seconds, float
+MAX_BUFFER_LENGTH=50
 
 #Global Lists
 players={} #plid: player instance
 games={} #gmid: game instance
 
 playerSaveArray={} #plid: [username,chips]
+blocklist=[] #list of plids
 
 class card:
     def __init__(self,rankid,suitid):

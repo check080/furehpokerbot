@@ -2,10 +2,6 @@ from globals import *
 from game import game
 from player import player
 
-#TODO:
-#Add rules and a list of poker hands
-#Introduce timers so that default options activate after a time limit
-
 #Global variables
 cont=True
 gamesFrozen=False

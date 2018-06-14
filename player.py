@@ -32,7 +32,6 @@ class player:
         self.folded=False
         self.hand=[]
         self.swapcards=[]
-        self.timerRef=0
         self.contributedBet=0
         self.awaitingInput="none" #Can be none, handturn, dealcards, betturn, raiseamt
         #NOW THAT YOU'RE OUT OF A GAME, SAVE

@@ -1,4 +1,5 @@
 from random import shuffle
+from threading import Timer
 from globals import *
 
 class game:
@@ -16,6 +17,16 @@ class game:
         self.currentBet=0
         self.consecutiveCalls=0
         self.pot=0 #number of chips in the pot
+        self.currentTimer=Timer(GAME_START_TIME_LIMIT,self.timeoutBegin) #reference to the timer that times turns
+        self.currentTimer.start()
+    def timeoutBegin(self):
+        if(len(self.pPlaying)==1):
+            sendMessage(self.pPlaying[0],"Timed out, not enough players. Game shut down.")
+            self.destroyGame()
+        elif(len(self.pPlaying)>1):
+            for i in self.pPlaying:
+                sendMessage(i,"Timed out, starting game with %d players."%len(self.pPlaying))
+            self.startHand()
     def addPlayer(self,userid):
         players[userid].currentGame=self.id #set their current game
         self.pPlaying.append(userid) #add them to the list
@@ -38,6 +49,7 @@ class game:
             if(i!=plid):
                 sendMessage(i,"@%s: %s"%(players[plid].username,text))
     def startHand(self):
+        self.currentTimer.cancel()
         self.phase="hand"
         #Make deck(s), shuffle deck
         for k in range(CARD_DECKS):
@@ -46,6 +58,8 @@ class game:
                     self.deck.append(card(i,j))
         shuffle(self.deck)
         #Give everyone 5 cards, put entry cost into the piot, send everyone a message, listen for responses, and start a timer
+        self.currentTimer=Timer(RESPONSE_TIME_LIMIT,self.forceHold) #Start a timer
+        self.currentTimer.start()
         for i in self.pPlaying:
             #Give everyone 5 cards
             for j in range(CARDS_PER_HAND):
@@ -62,6 +76,7 @@ class game:
     def handTurn(self,userid):
         self.playersConfirmed[userid]=True
         if(len(self.playersConfirmed)>=len(self.pPlaying)): #if everyone is confirmed trigger the next turn
+            self.currentTimer.cancel()
             self.playersConfirmed={}
             self.currentHandRound+=1
             numHolding=0
@@ -77,6 +92,8 @@ class game:
                 self.currentHandRound=0 #for safety
                 self.startBet()
             else:
+                self.currentTimer=Timer(RESPONSE_TIME_LIMIT,self.forceHold) #Start a timer
+                self.currentTimer.start()
                 for i in self.pPlaying:
                     if(not players[i].holding):
                         players[i].awaitingInput="handturn" #An event listener answered by player.acceptResponse
@@ -85,6 +102,11 @@ class game:
                         makeKeyboard(["HOLD","DEAL"]) )
                     else:
                         sendMessage(i,"Wait for the other players to finish the second round of dealing... %2.0f minutes maximum" %(RESPONSE_TIME_LIMIT/60))
+    def forceHold(self):
+        for plid in self.pPlaying:
+            if(not plid in self.playersConfirmed.keys() and not players[plid].holding):
+                sendMessage(plid,"Timed out. You have defaulted to HOLD.")
+                players[plid].acceptResponse("HOLD")
     def startBet(self):
         self.currentBetTurn=0
         self.currentPlayerTurn=self.pPlaying[(self.currentBetTurn)%len(self.pPlaying)]
@@ -95,9 +117,12 @@ class game:
                           "\nBetting will now begin.\n@%s's turn"%players[self.currentPlayerTurn].username )
         sendMessage(self.currentPlayerTurn,"The current bet is %d. The pot has %d chips.\n"%(self.currentBet,self.pot)+makeKeyboard(["CALL","RAISE","FOLD"])) #Display hand?
         players[self.currentPlayerTurn].awaitingInput="betturn"
+        self.currentTimer=Timer(RESPONSE_TIME_LIMIT,self.forceFold,args=[self.currentPlayerTurn]) #Start a timer
+        self.currentTimer.start()
     def betTurn(self):
         #Setup the next turn, message the next person their query
         players[self.currentPlayerTurn].awaitingInput="none"
+        self.currentTimer.cancel()
         self.currentBetTurn+=1
         self.currentPlayerTurn=self.pPlaying[(self.currentBetTurn)%len(self.pPlaying)]
         if(self.currentBetTurn>=BETTING_ROUNDS*len(self.pPlaying) or self.consecutiveCalls>=len(self.pPlaying)):
@@ -113,6 +138,9 @@ class game:
             "\nOptions:\nCALL - match the bet\nRAISE - increase the bet\nFOLD - drop out of the game"+
             makeKeyboard(["CALL","RAISE","FOLD"])) #display hand?
             players[self.currentPlayerTurn].awaitingInput="betturn"
+    def forceFold(self,userid):
+        sendMessage(userid,"Timed out. You have defaulted to FOLD.")
+        players[userid].acceptResponse("FOLD")
     def endGame(self):
         #Check which player(s) won, give them the pot
         winArray=getBestHand({i:players[i].hand for i in self.pPlaying if not players[i].folded})

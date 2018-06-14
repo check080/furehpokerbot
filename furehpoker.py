@@ -27,6 +27,7 @@ def getLeaderboard(): #Returns a list of the people with the most chips, greates
         if(numAppended>=LEADERBOARD_NUM):
             break
         topScores.append([key,value])
+        numAppended+=1
     return topScores
 
 def getGameList(): #Returns a list of the games currently running/waiting for players
@@ -137,7 +138,7 @@ def processCommand(usrReq):
                 targetID=int(cmdList[1])
                 balanceAMT=int(cmdList[2])
                 players[targetID].chips=balanceAMT
-                players[targerID].updateTier()
+                players[targetID].updateTier()
                 sendMessage(userid,"Chips of %d set to %d." %(targetID,players[targetID].chips) )
             except IndexError:
                 sendMessage(userid,"Not enough arguments, expected 2: /setbalance [playerid] [amount]")
@@ -165,8 +166,7 @@ def processCommand(usrReq):
             sendMessage(userid,"Welcome to Fur-Eh poker. Type /rules to learn to play, or /join to join a game." +
                                "Type /help for more commands. Your balance is %d chips." %players[userid].chips +
                                "\nOnce you run out of chips you will not be able to play for THE REST of fur-eh." +
-                               "\nIf you have questions, message @check080"+
-                               "\nJoined global chat.")
+                               "\nIf you have questions, message @check080")
 
     elif(cmdList[0]=="/help"):
         retString="Bot Commands:\n" \
@@ -188,10 +188,31 @@ def processCommand(usrReq):
         sendMessage(userid,retText)
 
     elif(cmdList[0]=="/rules"):
-        sendMessage(userid,"POKER RULES GO HERE")
+        sendMessage(userid,"Your goal is to get the best hand. If you have the best hand by the end of the game, you win all chips in the pot.\n" \
+                           "The game is split into two phases: the hand phase and the bet phase.\n" \
+                           "During the hand phase you can put extra chips into the pot and exchange cards in your hand for other cards.\n" \
+                           "This is called a DRAW. You are allowed to do this twice, but each time costs chips.\n" \
+                           "If you are satisfied with your hand, HOLD instead.\n" \
+                           "During the bet phase each player goes one at a time. You need to contribute a certain bet to stay in the game.\n" \
+                           "On your turn you can either CALL, RAISE, or FOLD.\n" \
+                           "CALL takes the minimum amount of chips from you and puts it into the pot.\n" \
+                           "RAISE allows you to put even more chips in, and force others to either CALL your bet or FOLD.\n" \
+                           "FOLD drops you out of the round and prevents you from winning, but you are no longer forced to put more chips in.\n" \
+                           "At this point, the player who has not folded who has the best hand wins.\n" \
+                           "To see a list of hands, type /hands")
 
     elif(cmdList[0]=="/hands"):
-        sendMessage(userid,"LIST OF POKER HANDS GOES HERE")
+        sendMessage(userid,"From best to worst:\n" \
+                           "Royal Flush, 10 J Q K A, all the same suit\n" \
+                           "Straight Flush, any 5 consecutive cards, all the same suit\n" \
+                           "4 of a kind, any 4 cards of the same rank\n" \
+                           "Full house, 2 cards of the same rank and 3 cards of the same rank\n" \
+                           "Flush, all cards are the same suit\n" \
+                           "Straight, any 5 consecutive cards\n" \
+                           "3 of a kind, any 3 cards of the same rank\n" \
+                           "2 pairs, 2 cards of the same rank and another 2 cards of the same rank\n" \
+                           "1 pair, 2 cards of the same rank\n" \
+                           "If noone has one of these hands, highest card wins")
 
     elif(cmdList[0]=="/balance"):
         sendMessage(userid,"You currently have %d chips.\nYou are tier %d." %(players[userid].chips,players[userid].currentTier))
@@ -203,8 +224,8 @@ def processCommand(usrReq):
     elif(players[userid].currentGame!=0): #if the player is in the middle of a game
         if(cmdList[0]=="/leave"):
             games[players[userid].currentGame].removePlayer(userid)
-            sendMessage(userid,"Removed from the game.\nRejoined global chat."+removeKeyboard())
-        elif(reqtext[0]=="/join"):
+            sendMessage(userid,"Removed from the game."+removeKeyboard())
+        elif(cmdList[0]=="/join"):
             sendMessage(userid,"You can't use that command in the middle of a game. Use /leave to leave your current game.")
         else:
             players[userid].acceptResponse(reqtext)
@@ -229,11 +250,6 @@ def processCommand(usrReq):
                     sendMessage(userid,"An admin has stopped the creation of new games. Your chip count is now final. Have a fun Fur-Eh!")
                 else:
                     newGame(players[userid].currentTier,userid)
-                    
-    elif(reqtext[0]!="/"): #Send as global chat
-        for plr in players.values():
-            if(plr.currentGame==0 and plr.id!=userid):
-                sendMessage(plr.id,"[TIER %d]@%s: %s" %(players[userid].currentTier,players[userid].username,reqtext))
     
 
 def main():
@@ -250,7 +266,9 @@ def main():
 
         #CHECK FOR PLAYER INPUT
         reqBuf=botUpdate(numClear) #this takes time
-        if(reqBuf):
+        if(reqBuf==False):
+            sendMessage(ADMIN_IDS[0],"Fatal error: failed to process telegram api update data.")
+        else:
                 
             for i in reqBuf:
                 try:
@@ -262,8 +280,5 @@ def main():
                     
                 except KeyError:
                     continue
-        
-    botUpdate(numClear) #get rid of the last update queue
-
 
 main()

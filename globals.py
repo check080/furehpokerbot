@@ -39,16 +39,23 @@ class card:
         return RANK_DICT[self.rankid]+" of "+SUIT_DICT[self.suitid]
 
 def sendBotRequest(requestName):
-    return requests.get(ACCESS_WEBSITE+requestName).content
+    return requests.get(ACCESS_WEBSITE+requestName).content.decode("utf-8")
 
 def botUpdate(num):
-    jsonData=json.loads(sendBotRequest("getupdates?offset=%d" %num))
+    try:
+        jsonString=sendBotRequest("getupdates?offset=%d" %num)
+        jsonData=json.loads(jsonString)
+    except ValueError:
+        print("[ERROR] Failed to decode JSON string in telegram bot api")
+        return False
     try:
         if(jsonData["ok"]==True):
             return jsonData["result"]
         else:
+            print("[ERROR] Telegram API returned not OK")
             return False
     except KeyError:
+        print("[ERROR] Telegram API returned with incorrect format")
         return False
 
 def sendMessage(chat_id,text):
@@ -69,7 +76,7 @@ def removeKeyboard():
 def saveData():
     try:
         jsonString=json.dumps(playerSaveArray)
-    except JSONDecodeError:
+    except ValueError:
         print("[ERROR]: FAILED to convert player save data to json.")
         return
     try:
@@ -104,3 +111,5 @@ def loadData():
         return False
     except IndexError:
         print("[LOG] File %s is in an incorrect format - invalid array size"%SAVE_FILE)
+    except TypeError:
+        print("[LOG] File %s is in an incorrect format - must be a text file"%SAVE_FILE)

@@ -139,7 +139,10 @@ class player:
                     if(i!=self.id):
                          sendMessage(i,"@%s folded."%self.username)
                 curGame.consecutiveCalls+=1
-                curGame.betTurn()
+                if(len([i for i in curGame.pPlaying if not players[i].folded])<=1):
+                    curGame.endGame()
+                else:
+                    curGame.betTurn()
             else:
                 curGame.sendChat(self.id,reqtext)
         elif(self.awaitingInput=="raiseamt"):

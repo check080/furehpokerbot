@@ -31,6 +31,8 @@ class game:
         saveData()
         if(len(self.pPlaying)==0):
             self.destroyGame()
+        elif(len(self.pPlaying)==1 and self.phase!="wait"):
+            self.endGame()
     def sendChat(self,plid,text):
         for i in self.pPlaying:
             if(i!=plid):
@@ -70,8 +72,6 @@ class game:
                     self.playersConfirmed[i]=True #auto-hold if they held last turn
             if(self.currentHandRound==MAX_DEALS): #if people used up 2 deals
                 self.currentHandRound=0 #for safety
-                for i in self.pPlaying:
-                    sendMessage(i,"Final hand: "+players[i].getHand())
                 self.startBet()
             elif(numHolding==len(self.pPlaying)): #if everyone is holding
                 self.currentHandRound=0 #for safety
@@ -91,7 +91,8 @@ class game:
         self.playersConfirmed={}
         self.consecutiveCalls=0
         for i in self.pPlaying:
-            sendMessage(i,"All hands are now final. Betting will now begin.\n@%s's turn"%players[self.currentPlayerTurn].username)
+            sendMessage(i,"Final hand: "+players[i].getHand() +
+                          "\nBetting will now begin.\n@%s's turn"%players[self.currentPlayerTurn].username )
         sendMessage(self.currentPlayerTurn,"The current bet is %d. The pot has %d chips.\n"%(self.currentBet,self.pot)+makeKeyboard(["CALL","RAISE","FOLD"])) #Display hand?
         players[self.currentPlayerTurn].awaitingInput="betturn"
     def betTurn(self):
@@ -119,8 +120,7 @@ class game:
             players[plid].chips+=int(self.pot/len(winArray[0]))
         self.destroyGame()
         for i in self.pPlaying:
-            sendMessage(i,winArray[1]+"\nEach winner received %d chips.\n"%(self.pot/len(winArray[0]))+"End of the game. Type /join to join another one.\n"+
-            "Rejoined global chat.")
+            sendMessage(i,winArray[1]+"\nEach winner received %d chips.\n"%(self.pot/len(winArray[0]))+"End of the game. Type /join to join another one.")
     def destroyGame(self):
         #Reset all the player's game vars
         for i in self.pPlaying:

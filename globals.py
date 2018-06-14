@@ -39,7 +39,7 @@ class card:
         return RANK_DICT[self.rankid]+" of "+SUIT_DICT[self.suitid]
 
 def sendBotRequest(requestName):
-    return requests.get(ACCESS_WEBSITE+requestName).content
+    return str(requests.get(ACCESS_WEBSITE+requestName).content)
 
 def botUpdate(num):
     jsonData=json.loads(sendBotRequest("getupdates?offset=%d" %num))

@@ -5,8 +5,6 @@ from player import player
 #TODO:
 #Add rules and a list of poker hands
 #Introduce timers so that default options activate after a time limit
-#Add a betting phase
-#Add saving
 
 #Global variables
 cont=True
@@ -46,7 +44,6 @@ def getGameList(): #Returns a list of the games currently running/waiting for pl
     return tieredGames
 
 def newGame(tiernum,creatorid):
-    print("Starting new game for tier %d..." %tiernum)
     success=False
     gmid=0
     for i in range(1,MAX_SIMULTANEOUS_GAMES+1):
@@ -59,7 +56,7 @@ def newGame(tiernum,creatorid):
     else:
         games[gmid]=game(gmid,tiernum,creatorid)
         players[creatorid].currentGame=gmid
-        sendMessage(creatorid,"New game created. Game will start in %2.0f minutes at most. Waiting for players..." %(GAME_START_TIME_LIMIT/60))
+        sendMessage(creatorid,"New game created for tier %d. Game will start in %2.0f minutes, or when %d players join. Waiting for players...\nSwitched to ingame chat." %(tiernum,GAME_START_TIME_LIMIT/60,MAX_PLAYERS_PER_GAME))
         #START A TIMER
 
 		
@@ -82,14 +79,14 @@ def processCommand(usrReq):
             reqtext=reqtext.replace(i,"")
     if(len(reqtext)<1):
         return
+    cmdList=reqtext.split(" ")
     
     print("FROM %d (%s): %s" %(userid,username,reqtext) ) #print it
 
     if(userid in ADMIN_IDS):
-        cmdList=reqtext.split(" ")
         #ADMIN COMMANDS
         if(cmdList[0]=="/quit"):
-            print("Admin called quit.")
+            print("[LOG] Admin called quit.")
             sendMessage(userid,"Server shutdown.")
             cont=False
 
@@ -100,7 +97,8 @@ def processCommand(usrReq):
                       "/gamestats - See all game stats\n" \
                       "/freeze - stop game events, stop sending invites\n" \
                       "/resume - continue game events and invites\n" \
-                      "/setbalance [userid] [amount] - set a player's chip number"
+                      "/setbalance [userid] [amount] - set a player's chip number\n" \
+                      "/notify [text] - make an announcement to everyone on the user list"
             sendMessage(userid,retString)
             
         elif(cmdList[0]=="/startgame"):
@@ -147,19 +145,30 @@ def processCommand(usrReq):
                 sendMessage(userid,"Arguments are in the wrong type, expected integers: /setbalance [playerid] [amount]")
             except KeyError:
                 sendMessage(userid,"User not found.")
+                
+        elif(cmdList[0]=="/notify"):
+            try:
+                retString="NOTICE: "
+                retString+=" ".join(cmdList[1:])
+                for i in players.keys():
+                    sendMessage(i,retString)
+            except IndexError:
+                sendMessage(userid,"No text found in first argument.")
 
     #USER COMMANDS
-    if(reqtext=="/start"):
+    if(cmdList[0]=="/start"):
         if(userid in players.keys() ): #if the player is already registered
             sendMessage(userid,"Welcome back to Fur-Eh poker. Your balance is %d chips." %players[userid].chips )
         else: #if they aren't
             players[userid]=player(userid,username,STARTING_CHIPS) #add a dict entry with a new instance of the player class
+            saveData()
             sendMessage(userid,"Welcome to Fur-Eh poker. Type /rules to learn to play, or /join to join a game." +
                                "Type /help for more commands. Your balance is %d chips." %players[userid].chips +
                                "\nOnce you run out of chips you will not be able to play for THE REST of fur-eh." +
-                               "\nIf you have questions, message @check080")
+                               "\nIf you have questions, message @check080"+
+                               "\nJoined global chat.")
 
-    elif(reqtext=="/help"):
+    elif(cmdList[0]=="/help"):
         retString="Bot Commands:\n" \
                   "/start - Start the bot\n" \
                   "/help - Get a list of commands\n" \
@@ -171,36 +180,36 @@ def processCommand(usrReq):
                   "/balance - See how many chips you have"
         sendMessage(userid,retString)
 
-    elif(reqtext=="/getleaderboard"):
+    elif(cmdList[0]=="/getleaderboard"):
         leaderList=getLeaderboard()
         retText="%d players waiting or ingame.\nTop chips:" %findNumPlaying()
         for i in leaderList:
             retText+="\n%s: %s" %(i[0],i[1])
         sendMessage(userid,retText)
 
-    elif(reqtext=="/rules"):
+    elif(cmdList[0]=="/rules"):
         sendMessage(userid,"POKER RULES GO HERE")
 
-    elif(reqtext=="/hands"):
+    elif(cmdList[0]=="/hands"):
         sendMessage(userid,"LIST OF POKER HANDS GOES HERE")
 
-    elif(reqtext=="/balance"):
-        sendMessage(userid,"You currently have %d chips." %players[userid].chips)
+    elif(cmdList[0]=="/balance"):
+        sendMessage(userid,"You currently have %d chips.\nYou are tier %d." %(players[userid].chips,players[userid].currentTier))
 
     elif(not userid in players.keys() ): #if the player hasn't yet said /start
         sendMessage(userid,"Start the bot with /start.")
         return #don't let them do any other commands
 
     elif(players[userid].currentGame!=0): #if the player is in the middle of a game
-        if(reqtext=="/leave"):
+        if(cmdList[0]=="/leave"):
             games[players[userid].currentGame].removePlayer(userid)
-            sendMessage(userid,"Removed from the game."+removeKeyboard())
+            sendMessage(userid,"Removed from the game.\nRejoined global chat."+removeKeyboard())
         elif(reqtext[0]=="/join"):
             sendMessage(userid,"You can't use that command in the middle of a game. Use /leave to leave your current game.")
         else:
             players[userid].acceptResponse(reqtext)
 
-    elif(reqtext=="/join"):
+    elif(cmdList[0]=="/join"):
         if(players[userid].currentTier==0):
             sendMessage(userid,"Sorry, you don't have enough chips to continue playing. Have a fun Fur-Eh!")
         else:
@@ -210,8 +219,9 @@ def processCommand(usrReq):
                     success=True
                     retString="Joined game. Users at the table:"
                     for i in g.pPlaying:
-                        retString+=("\n@"+players[i].username) #print usernames of everyone in the game lobby
+                        retString+=("\n@"+players[i].username) #get usernames of everyone in the game lobby
                         sendMessage(i,"@%s has joined the table." %username) #also tell everyone in the lobby that you joined
+                    retString+="\nSwitched to ingame chat."
                     sendMessage(userid,retString)
                     g.addPlayer(userid) #join the game
             if(not success): #make a new game if there are none open
@@ -219,13 +229,21 @@ def processCommand(usrReq):
                     sendMessage(userid,"An admin has stopped the creation of new games. Your chip count is now final. Have a fun Fur-Eh!")
                 else:
                     newGame(players[userid].currentTier,userid)
+                    
+    elif(reqtext[0]!="/"): #Send as global chat
+        for plr in players.values():
+            if(plr.currentGame==0 and plr.id!=userid):
+                sendMessage(plr.id,"[TIER %d]@%s: %s" %(players[userid].currentTier,players[userid].username,reqtext))
     
 
 def main():
     #Load from file
-    for i in players.values():
-        sendMessage(i.id,"Server restarted. Any previously ongoing games were terminated. Sorry for any inconvenience.")
-    print("Initialized.")
+    if(loadData()):
+        for plid,plarr in playerSaveArray.items():
+            players[plid]=player(plid,plarr[0],plarr[1])
+        for i in players.values():
+            sendMessage(i.id,"Server restarted. Any previously ongoing games were terminated. Sorry for any inconvenience.")
+    print("[LOG] Initialized.")
 
     numClear=0
     while cont:

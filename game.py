@@ -8,13 +8,14 @@ class game:
         self.entryCost=TIER_BUYINS[tiernum-1] #the amount it will cost to enter the game; arrays start at 0
         self.phase="wait" #can be wait, hand, or bet
         self.pPlaying=[creatorid] #list of all playing plid's
-        self.currentPlayerTurn=0 #array index of which player's turn it is
+        self.currentPlayerTurn=0 #plid of who's turn it is
         self.currentHandRound=0 #turn number of which round it is
+        self.currentBetTurn=0
         self.playersConfirmed={} #users who have finished their turn
         self.deck=[] #list of all cards remaining in the deck
         self.currentBet=0
+        self.consecutiveCalls=0
         self.pot=0 #number of chips in the pot
-        self.beginGame()
     def addPlayer(self,userid):
         players[userid].currentGame=self.id #set their current game
         self.pPlaying.append(userid) #add them to the list
@@ -27,14 +28,13 @@ class game:
                 sendMessage(plid,"%s has left the table." %players[userid].username)
         players[userid].currentGame=0
         players[userid].gameInit()
+        saveData()
         if(len(self.pPlaying)==0):
             self.destroyGame()
     def sendChat(self,plid,text):
         for i in self.pPlaying:
             if(i!=plid):
                 sendMessage(i,"@%s: %s"%(players[plid].username,text))
-    def beginGame(self):
-        print("New game started")
     def startHand(self):
         self.phase="hand"
         #Make deck(s), shuffle deck
@@ -55,7 +55,7 @@ class game:
             players[i].awaitingInput="handturn" #An event listener answered by player.acceptResponse
             sendMessage(i,"Game start! %d of your chips have been placed into the pot."%self.entryCost+
                         "\nCards: "+players[i].getHand()+
-                        "\n\nOptions:\nHOLD - keep your hand, free\nDEAL - swap out any cards, %d chips"%DEAL_COSTS[self.currentHandRound]+
+                        "\n\nOptions:\nHOLD - keep your hand, free\nDEAL - exchange some cards, %d chips"%DEAL_COSTS[self.currentHandRound]+
                         makeKeyboard(["HOLD","DEAL"]) )
     def handTurn(self,userid):
         self.playersConfirmed[userid]=True
@@ -71,41 +71,61 @@ class game:
             if(self.currentHandRound==MAX_DEALS): #if people used up 2 deals
                 self.currentHandRound=0 #for safety
                 for i in self.pPlaying:
-                    if(not players[i].holding):
-                        sendMessage(i,"Final hand: "+players[i].getHand())
-                self.endGame() #self.startBet()
+                    sendMessage(i,"Final hand: "+players[i].getHand())
+                self.startBet()
             elif(numHolding==len(self.pPlaying)): #if everyone is holding
                 self.currentHandRound=0 #for safety
-                self.endGame() #self.startBet()
+                self.startBet()
             else:
                 for i in self.pPlaying:
                     if(not players[i].holding):
                         players[i].awaitingInput="handturn" #An event listener answered by player.acceptResponse
                         sendMessage(i,"Cards: "+players[i].getHand()+
-                        "\n\nOptions:\nHOLD - keep your hand, free\nDEAL - swap out any cards, %d chips"%DEAL_COSTS[self.currentHandRound]+
+                        "\n\nOptions:\nHOLD - keep your hand, free\nDEAL - exchange some cards, %d chips"%DEAL_COSTS[self.currentHandRound]+
                         makeKeyboard(["HOLD","DEAL"]) )
                     else:
                         sendMessage(i,"Wait for the other players to finish the second round of dealing... %2.0f minutes maximum" %(RESPONSE_TIME_LIMIT/60))
     def startBet(self):
-        self.currentTurn=0
-        sendMessage(self.pPlaying[self.currentTurn],"The current bet is %d."%self.currentBet+"Cards: "+players[self.pPlaying[self.currentTurn]].getHand()+makeKeyboard(["FOLD","CALL","RAISE"]))
+        self.currentBetTurn=0
+        self.currentPlayerTurn=self.pPlaying[(self.currentBetTurn)%len(self.pPlaying)]
+        self.playersConfirmed={}
+        self.consecutiveCalls=0
+        for i in self.pPlaying:
+            sendMessage(i,"All hands are now final. Betting will now begin.\n@%s's turn"%players[self.currentPlayerTurn].username)
+        sendMessage(self.currentPlayerTurn,"The current bet is %d. The pot has %d chips.\n"%(self.currentBet,self.pot)+makeKeyboard(["CALL","RAISE","FOLD"])) #Display hand?
+        players[self.currentPlayerTurn].awaitingInput="betturn"
     def betTurn(self):
-        #Let everyone bet one at a time
         #Setup the next turn, message the next person their query
-        self.currentTurn=(self.currentTurn+1)%len(self.pPlaying)
-        sendMessage(self.pPlaying[self.currentTurn],"The current bet is %d."%self.currentBet+"Cards: "+players[self.pPlaying[self.currentTurn]].getHand()+makeKeyboard(["FOLD","CALL","RAISE"]))
+        players[self.currentPlayerTurn].awaitingInput="none"
+        self.currentBetTurn+=1
+        self.currentPlayerTurn=self.pPlaying[(self.currentBetTurn)%len(self.pPlaying)]
+        if(self.currentBetTurn>=BETTING_ROUNDS*len(self.pPlaying) or self.consecutiveCalls>=len(self.pPlaying)):
+            self.currentBetTurn=0 #for safety
+            self.endGame()
+        elif(players[self.currentPlayerTurn].folded):
+            self.consecutiveCalls+=1
+            self.betTurn()
+        else:
+            for i in self.pPlaying:
+                sendMessage(i,"@%s's turn"%players[self.currentPlayerTurn].username)
+            sendMessage(self.currentPlayerTurn,"The current bet is %d. The pot has %d chips.\n"%(self.currentBet,self.pot)+
+            "\nOptions:\nCALL - match the bet\nRAISE - increase the bet\nFOLD - drop out of the game"+
+            makeKeyboard(["CALL","RAISE","FOLD"])) #display hand?
+            players[self.currentPlayerTurn].awaitingInput="betturn"
     def endGame(self):
         #Check which player(s) won, give them the pot
-        winArray=getBestHand({i:players[i].hand for i in self.pPlaying}) #CHANGE THIS TO THE LIST OF PEOPLE THAT DIDN'T FOLD
+        winArray=getBestHand({i:players[i].hand for i in self.pPlaying if not players[i].folded})
         for plid in winArray[0]:
             players[plid].chips+=int(self.pot/len(winArray[0]))
         self.destroyGame()
         for i in self.pPlaying:
-            sendMessage(i,winArray[1]+"\nEach winner received %d chips.\n"%(self.pot/len(winArray[0]))+"End of the game. Type /join to join another one.")
+            sendMessage(i,winArray[1]+"\nEach winner received %d chips.\n"%(self.pot/len(winArray[0]))+"End of the game. Type /join to join another one.\n"+
+            "Rejoined global chat.")
     def destroyGame(self):
         #Reset all the player's game vars
         for i in self.pPlaying:
             players[i].gameInit()
+            saveData()
         #Delete from games list (and hopefully free instance?? python is weird so idk)
         del games[self.id]
 

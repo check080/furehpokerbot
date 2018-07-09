@@ -3,7 +3,7 @@ import requests
 import json
 
 LEGAL_CHARS=set(printable)
-BOT_TOKEN="598223102:AAGRkSBjoZV2KMKLtGAFB7xlMJnN1xShpTA"
+BOT_TOKEN="REDACTED"
 ACCESS_WEBSITE="https://api.telegram.org/bot"+BOT_TOKEN+"/"
 RANK_DICT={2:"2",3:"3",4:"4",5:"5",6:"6",7:"7",8:"8",9:"9",10:"10",11:"Jack",12:"Queen",13:"King",14:"Ace"}
 SUIT_DICT={1:"Spades",2:"Hearts",3:"Diamonds",4:"Clubs"}
@@ -16,7 +16,7 @@ ADMIN_IDS=[156638024,131331518] #Facade and Alexi
 LEADERBOARD_NUM=10 #How many names to display in the leaderboard
 MAX_SIMULTANEOUS_GAMES=40
 STARTING_CHIPS=1000
-MAX_PLAYERS_PER_GAME=3 #will change later; can't be more than 10 if only 1 deck is used
+MAX_PLAYERS_PER_GAME=5 #will change later; can't be more than 10 if only 1 deck is used
 MAX_DEALS=2
 BETTING_ROUNDS=2
 DEAL_COSTS=[10,20] #The price of dealing based on which turn, needs to be MAX_DEALS long

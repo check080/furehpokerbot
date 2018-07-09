@@ -106,7 +106,12 @@ class game:
         for plid in self.pPlaying:
             if(not plid in self.playersConfirmed.keys() and not players[plid].holding):
                 sendMessage(plid,"Timed out. You have defaulted to HOLD.")
-                players[plid].acceptResponse("HOLD")
+                players[plid].holding=True
+                players[plid].awaitingInput="none"
+                for i in self.pPlaying:
+                    if(i!=plid):
+                        sendMessage(i,"@%s is holding."%players[plid].username)
+                self.handTurn(plid)
     def startBet(self):
         self.currentBetTurn=0
         self.currentPlayerTurn=self.pPlaying[(self.currentBetTurn)%len(self.pPlaying)]
@@ -140,7 +145,16 @@ class game:
             players[self.currentPlayerTurn].awaitingInput="betturn"
     def forceFold(self,userid):
         sendMessage(userid,"Timed out. You have defaulted to FOLD.")
-        players[userid].acceptResponse("FOLD")
+        players[userid].folded=True
+        players[userid].awaitingInput="none"
+        for i in self.pPlaying:
+            if(i!=userid):
+                sendMessage(i,"@%s folded."%players[userid].username)
+        self.consecutiveCalls+=1
+        if(len([i for i in self.pPlaying if not players[i].folded])<=1):
+            self.endGame()
+        else:
+            self.betTurn()
     def endGame(self):
         #Check which player(s) won, give them the pot
         winArray=getBestHand({i:players[i].hand for i in self.pPlaying if not players[i].folded})

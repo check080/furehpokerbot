@@ -149,6 +149,8 @@ class player:
                 raiseAmount=int(reqtext)
                 if(curGame.currentBet+raiseAmount-self.contributedBet>self.chips):
                     sendMessage(self.id,"You don't have enough chips to raise the bet by %d. You only have %d chips. Choose another amount to raise the bet by." %(raiseAmount,self.chips))
+                elif(raiseAmount<0):
+                    sendMessage(self.id,"NO CHEATING")
                 else:
                     curGame.currentBet+=raiseAmount
                     moneyreq=curGame.currentBet-self.contributedBet
